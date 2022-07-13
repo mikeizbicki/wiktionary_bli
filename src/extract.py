@@ -70,70 +70,84 @@ def clean_brackets(text):
     return ''.join(ret)
 
 
-def apply_templates(text):
+def parse_line(text):
     '''
     A template is wiktionary code inside the double curly braces {{ }}.
     Most templates do not include text that is part of a definition, and so we simply drop the template:
 
-    >>> apply_templates('{{lb|ms|Indonesia}}')['text']
+    >>> parse_line('{{lb|ms|Indonesia}}')['text']
     ''
-    >>> apply_templates('{{lb|ms|Indonesia}} [[free]]')['text']
+    >>> parse_line('{{lb|ms|Indonesia}} [[free]]')['text']
     ' free'
-    >>> apply_templates('{{lb|ms|Indonesia}} [[free]]')['text']
+    >>> parse_line('{{lb|ms|Indonesia}} [[free]]')['text']
     ' free'
-    >>> apply_templates('words {{lb|ms|Indonesia}} words')['text']
+    >>> parse_line('words {{lb|ms|Indonesia}} words')['text']
     'words  words'
-    >>> apply_templates('{{lb|pt|Christianity}} {{l|en|Holy Ghost}}; {{l|en|Holy Spirit}} {{gloss|one of the three figures of the Holy Trinity}}')['text']
+
+    Some templates include information that is part of the actual text and this info should be inlined
+
+    >>> parse_line('{{lb|pt|Christianity}} {{l|en|Holy Ghost}}; {{l|en|Holy Spirit}} {{gloss|one of the three figures of the Holy Trinity}}')['text']
     ' Holy Ghost; Holy Spirit '
 
-    >>> apply_templates('{{place|pt|municipality/state capital|s/Santa Catarina|c/Brazil|t=Florianópolis}}')['text']
+    >>> parse_line('{{place|pt|municipality/state capital|s/Santa Catarina|c/Brazil|t=Florianópolis}}')['text']
     'Florianópolis'
-    >>> apply_templates('{{place|en|An <<overseas territory>> (technically an {{w|unincorporated territory}}) of the <<c/United States>>, located in the <<ocean/Pacific Ocean>>|official=Territory of Guam}}')['text']
+    >>> parse_line('{{place|en|An <<overseas territory>> (technically an {{w|unincorporated territory}}) of the <<c/United States>>, located in the <<ocean/Pacific Ocean>>|official=Territory of Guam}}')['text']
     'An <<overseas territory>> (technically an unincorporated territory) of the <<c/United States>>, located in the <<ocean/Pacific Ocean>>'
+    >>> parse_line('{{female equivalent of|es|hermano|gloss=sister}}')['text']
+    'sister'
+    >>> parse_line('{{ISO 639|2&3|ca|Catalan}}')['text']
+    'Catalan'
+    >>> parse_line('{{vern|African golden cat}} ({{taxlink|Caracal aurata|species|ver=210608}})')['text']
+    'African golden cat (Caracal aurata)'
 
-    Some templates, however, are commonly used in definitions to highlight alternative conjugations of words.
-    These templates commonly have a parameter of `gloss=XXX` or `t=XXX` where the XXX is part of the definition.
-    The following are examples from the Spanish definition of "hermana".
+    # {{lb|en|historical}} The smallest unit of currency in South Asia, equivalent to {{frac|1|192}} of a [[rupee]] or {{frac|1|12}} of an [[anna]].
+    'The smallest unit of currency in South Asia, equivalent to 1/192 of a rupee or 1/12 of an anna.
 
-    >>> apply_templates('{{female equivalent of|es|hermano|gloss=sister}}')['text']
+    Templates can be nested, and so the parser needs to be able to handle these cases:
+
+    >>> parse_line('{{lb|de|with {{m|de|von}}}} [[free]] of {{gloss|not containing or unaffected by}}')['text']
+    ' free of '
+
+    >>> parse_line('[[blahblahblah|{{female equivalent of|es|hermano|gloss=sister}}]]')['text']
     'sister'
 
-    FIXME:
-    There are too many other templates that use the t= argument.
-    > apply_templates('words {{female equivalent of|es|hermano|t=sister}} more words')
-    'words sister more words'
 
-    FIXME:
-    The explanation above is highly simplified.
-    Technically, these named parameters should only be included for specific templates,
-    and there may be other templates where these parameters should not be included.
-    These parameters can also be specified positionally (pos 4),
-    but the there are many other templates where pos 4 should not be included,
-    so we're not representing that position.
-    There may also be templates that use other parameter names/position numbers that should be included
+    # FIXME:
 
     > # {{inflection of|la|piō||2|s|pres|actv|subj}}
     'piō'
 
-    Templates can be nested, and so the parser needs to be able to handle these cases:
+    #>>> parse_line('{{lb|en|Australian rules football|Gaelic football}} {{abbreviation of|en|free kick}}')
+    #'free kick'
 
-    >>> apply_templates('{{lb|de|with {{m|de|von}}}} [[free]] of {{gloss|not containing or unaffected by}}')['text']
-    ' free of '
 
-    >>> apply_templates('[[blahblahblah|{{female equivalent of|es|hermano|gloss=sister}}]]')['text']
-    'sister'
 
+    =======
+    Parsing synonyms
+    =======
+
+    >>> parse_line('{{syn|ru|же́нщина|t1=woman|ба́ба|;|t2=older woman|q2=informal}}')['syn']
+    ['же́нщина', 'ба́ба']
+    >>> parse_line('{{syn|en|wordbook|Thesaurus:dictionary}}')['syn']
+    ['wordbook']
+    >>> parse_line('{{syn|ru|совреме́нный<t:contemporary>|мо́дный<t:fashionable>|модерно́вый<tr:modɛrnóvyj><t:fashionable, contemporary><q:colloquial>}}')['syn']
+    ['совреме́нный', 'мо́дный', 'модерно́вый']
+    >>> parse_line('{{syn|ru|кавале́р|ухажёр|;|покло́нник<t:admirer, fan>|;|друг<t:boyfriend; friend>|;|па́рень<t:boyfriend; lad, boy>|;|возлю́бленный<t:sweetheart>|люби́мый<t:sweetheart>|;|жени́х<t:fiancé>|;|любо́вник<t:lover>|;|партнёр<t:partner>|;|сожи́тель<t:cohabitant>}}')['syn']
+    ['кавале́р', 'ухажёр', 'покло́нник', 'друг', 'па́рень', 'возлю́бленный', 'люби́мый', 'жени́х', 'любо́вник', 'партнёр', 'сожи́тель']
 
     '''
 
     import mwparserfromhell
     wikicode = mwparserfromhell.parse(text)
-    ret = {}
-    ret['unknown_templates'] = []
+    ret = defaultdict(lambda: [])
+    #ret = {}
+    #ret['unknown_templates'] = []
+    #ret['conjugations'] = []
+    #ret['synonyms'] = []
     
     def recurse(v):
         if v:
-            r = apply_templates(v)
+            r = parse_line(v)
             chunks.append(r['text'])
             ret['unknown_templates'].extend(r['unknown_templates'])
 
@@ -144,42 +158,138 @@ def apply_templates(text):
         if type(node) is mwparserfromhell.nodes.wikilink.Wikilink:
             if node.text:
                 recurse(node.text)
-                #chunks.append(apply_templates(node.text))
+                #chunks.append(parse_line(node.text))
             else:
                 recurse(node.title)
-                #chunks.append(apply_templates(node.title))
+                #chunks.append(parse_line(node.title))
 
         # {{templates}} require complex processing for each different template
         elif type(node) is mwparserfromhell.nodes.template.Template:
-            template_names[str(node.name)] += 1
-            if node.name in ['l', 'link']:
-                recurse(node.get(2, None))
-            elif node.name in ['place']:
+            nodename = str(node.name).strip()
+            template_names[nodename] += 1
+            if nodename in ['place']:
                 recurse(node.get('t', node.get(2, None)).value)
-            elif node.name in ['w']:
+            elif nodename in ['place']:
+                recurse(node.get('t', node.get(2, None)).value)
+            elif nodename in ['initialism of']:
+                recurse(node.get('t', node.get(2, None)).value)
+            elif nodename in ['w', 'unsupported']:
                 recurse(node.get(2, node.get(1, None)))
+            elif nodename in ['m', 'mention', 'l', 'link', 'l-lite', 'm-lite']:
+                recurse(node.get('t', node.get(4, node.get(3, node.get(2, node.get(1, None))))))
+            elif nodename in ['zh-l']:
+                recurse(node.get('t', None))
+            elif nodename in ['zh-classifier']:
+                recurse(node.get(2, node.get('t', None)))
+
+            elif nodename in ['ISO 639', 'ISO 3166']:
+                recurse(node.get(3, None))
+
+            elif nodename in ['vern']:
+                recurse(node.get(1, None))
+            elif nodename in ['taxlink']:
+                recurse(node.get(3, node.get(1, None)))
+            elif nodename in ['frac']:
+                recurse(node.get(1, None))
+                chunks.append('/')
+                recurse(node.get(2, None))
+            elif nodename in ['zh-original', 'zh-abbrev',]:
+                recurse(node.get(2, None))
+
+            elif nodename in ['abbreviation of', 'clipping of']:
+                lemma = node.get(2, None)
+                recurse(lemma)
+                ret['conjugations'].append(str(node))
+            elif nodename in [
+                'inflection of',
+                'alternative spelling of',
+                'alternative form of',
+                'alt form',
+                'altform',
+                'alt sp',
+                'ca-verb form of',
+                'fr-post-1990',
+                'sv-noun-form-indef-pl',
+                ] or nodename[-3:] == ' of' or nodename[-3:] == '-of' or nodename[-4:] == '-alt':
+                ret['conjugations'].append(str(node))
 
             # just ignore these templates
-            elif node.name in ['Latn-def', 'Latn-def-lite', 'Latn-def', 'rfdef']:
+            elif nodename in [ 
+                # definition needed
+                'rfdef',
+                'rfclarify',
+                'rfex',
+
+                # used on individual letters
+                'Latn-def', 'Latn-def-lite', 'Latn-def',
+
+                # add non-definitional extra information
+                'gl', 'gloss', 'gloss-lite',
+                'lb', 'lbl', 'label', 'tlb', 'term-label',
+                'ng', 'n-g', 'ngd', 'n-g-lite', 'non-gloss definition',
+                'q', 'qf', 'qual', 'qualifier', 'q-lite', 'qualifier-lite',
+                'c', 'C', 'topics',
+                'given name', 'surname',
+                'defdate',
+                '+obj',
+                'cln',
+                'only used in', 'used in phrasal verbs',
+                'term-label',
+                'ja-def',
+                'mul-kangxi radical-def',
+                'zh-mw',
+                'short for',
+
+                # possibly these could be added?
+                'bond credit rating',
+                'taxon',
+
+                # a type of anchor tag
+                'anchor', 'senseid', 'rfd-sense', 'rfv-sense', 'sense', 'sense-lite',
+
+                # typography
+                ','
+                ]:
                 pass
+
+            # synonyms; see https://en.wiktionary.org/wiki/Category:Semantic_relation_templates
+            elif nodename in ['syn', 'synonyms', 'coordinate terms', 'ant', 'antonyms', 'holonyms', 'hypernyms', 'holonyms', 'holo', 'hyper', 'impf', 'imperfectives', 'meronyms', 'inline alt forms', 'perfectives', 'pf', 'troponyms']:
+                for i in range(2,100):
+                    v = node.get(i, None)
+                    if v:
+                        v = rm_parens(str(v), '<>')
+                        if ':' not in v and ';' not in v:
+                            ret[nodename[:3]].append(v)
+                    #if t:
+                        #ret['synonyms'].append(str(t.value))
+                    t = node.get('t'+str(i), None)
+                    if not v and not t:
+                        break
+
+
+            # couldn't match the template
             else:
                 ret['unknown_templates'].append(str(node))
+                unknown_template_names[nodename] += 1
 
             # FIXME:
             # catchall for glosses
             for param in node.params:
                 if param.name == 'gloss':
                     recurse(param.value)
-                    found_glosses[str(node.name)] += 1
+                    found_glosses[nodename] += 1
 
         # if it's not a template or a link, just return the raw text
         else:
             chunks.append(str(node))
 
     ret['text'] = ''.join(chunks)
+    ret['translations'] = extract_definitions(ret['text'])
     return ret
 
 template_names = Counter()
+unknown_template_names = Counter()
+
 found_glosses = Counter()
 
 
@@ -237,44 +347,23 @@ def canonicalize(text):
         return text
 
 
-def extract_definitions(line):
+def extract_definitions(text):
     '''
-    >>> extract_definitions("# [[free]] (''obtainable without payment'')")
-    ['free']
-    >>> extract_definitions('# [[perquisite]], [[free]] [[gift]]')
+    >>> extract_definitions('perquisite, free gift')
     ['perquisite', 'free gift']
-    >>> extract_definitions('# {{lb|ms|Indonesia}} [[free]], without [[charge]]')
-    ['free', 'without charge']
-    >>> extract_definitions('# out of favor or kindness, without recompense or compensation, [[gratuitously]]')
+    >>> extract_definitions('out of favor or kindness, without recompense or compensation, gratuitously')
     ['out of favor or kindness', 'without recompense or compensation', 'gratuitously']
-    >>> extract_definitions('# [[#English|gratis]], [[free]]')
-    ['gratis', 'free']
-    >>> extract_definitions('# [[free]]; for free, without charge')
+    >>> extract_definitions('free; for free, without charge')
     ['free', 'for free', 'without charge']
-    >>> extract_definitions("# [[free]]; [[unrestricted]]; ''more negative also:'' [[unrestrained]]; [[licentious]]")
-    ['free', 'unrestricted', 'unrestrained', 'licentious']
-    >>> extract_definitions("# {{lb|de|not freely applicable; see usage notes}} [[free of charge]], [[gratis]]")
-    ['free of charge', 'gratis']
-    >>> extract_definitions("# [[dog]] ''([[Canis familiaris]])''")
-    ['dog']
-    >>> extract_definitions('# {{inflection of|es|tú||dative}}: to you, for you')
+
+    >>> extract_definitions("free (''obtainable without payment'')")
+    ['free']
+    >>> extract_definitions('to you, for you')
     ['you', 'for you']
-
-    >>> extract_definitions('# {{female equivalent of|es|hermano|gloss=sister}}')
-    ['sister']
-
-    # FIXME: see above
-    > extract_definitions('# {{female equivalent of|es|hermano|t=sister}}')
-    ['sister']
-
-    FIXME:
-    一共
-    # {{lb|zh|figurative}} {{w|Mao Zedong|Mao}} or pre-[[w:Economic reform in the People's Republic of China|reform]] era of the [[People's Republic of China]]
     '''
     ret = []
-    line = apply_templates(line)['text']
-    line = rm_parens(line)
-    for part in re.split(r'[,;]', line[2:]):
+    text = rm_parens(text)
+    for part in re.split(r'[,;]', text):
         part = clean_brackets(part)
         part = part.replace('.', '')
         part = part.replace(':', '')
@@ -321,7 +410,7 @@ def process_entry(title, text, rm_bad=False):
     '{"Cornish": {"Noun": {"magpies": 1}}, "Dutch": {"Noun": {"pee": 1, "piss": 1}}, "Kashubian": {"Noun": {"dog": 1}}, "Polish": {"Noun": {"dog": 1, "male dog": 1, "male fox or badger": 1, "cop": 1, "policeman": 1}}}'
 
     >>> __test_process_entry('may')
-    '{"English": {"Verb": {"strong": 1, "have power": 1, "able": 1, "can": 1, "able to go": 1, "have permission": 1, "allowed": 1, "gather may": 1, "or flowers in general": 1, "celebrate May Day": 1}, "Noun": {"hawthorn bush or its blossoms": 1, "maiden": 1}}, "Azerbaijani": {"Noun": {"May": 1}}, "Bikol Central": {"Verb": {"there is": 1, "there\'s": 1, "have": 1}}, "Crimean Tatar": {"Noun": {"butter": 1, "oil": 1}}, "Kalasha": {"Determiner": {"my": 1}, "Pronoun": {"me": 1}}, "Mapudungun": {"Adverb": {"yes": 1}}, "Northern Kurdish": {"Noun": {"intervention": 1}}, "Pacoh": {"Pronoun": {"you": 1}}, "Quechua": {"Adverb": {"where": 1, "like": 1, "how": 1, "very": 1}, "Pronoun": {"which": 1}, "Verb": {"fear": 1}}, "Tagalog": {"Particle": {"have": 1}}, "Tatar": {"Noun": {"May": 1}}, "Uzbek": {"Noun": {"May": 1}}, "Vietnamese": {"Verb": {"sew": 1}, "Adjective": {"lucky": 1}}, "Walloon": {"Noun": {"May": 1}}}'
+    '{"Translingual": {"Symbol": {"Malay": 1}}, "English": {"Verb": {"strong": 1, "have power": 1, "able": 1, "can": 1, "able to go": 1, "have permission": 1, "allowed": 1, "gather may": 1, "or flowers in general": 1, "celebrate May Day": 1}, "Noun": {"hawthorn bush or its blossoms": 1, "maiden": 1}}, "Azerbaijani": {"Noun": {"May": 1}}, "Bikol Central": {"Verb": {"there is": 1, "there\'s": 1, "have": 1}}, "Crimean Tatar": {"Noun": {"butter": 1, "oil": 1}}, "Kalasha": {"Determiner": {"my": 1}, "Pronoun": {"me": 1}}, "Mapudungun": {"Adverb": {"yes": 1}}, "Northern Kurdish": {"Noun": {"intervention": 1}}, "Pacoh": {"Pronoun": {"you": 1}}, "Quechua": {"Adverb": {"where": 1, "like": 1, "how": 1, "very": 1}, "Pronoun": {"which": 1}, "Verb": {"fear": 1}}, "Tagalog": {"Particle": {"have": 1}}, "Tatar": {"Noun": {"May": 1}}, "Uzbek": {"Noun": {"May": 1}}, "Vietnamese": {"Verb": {"sew": 1}, "Adjective": {"lucky": 1}}, "Walloon": {"Noun": {"May": 1}}}'
 
     '''
 
@@ -334,7 +423,14 @@ def process_entry(title, text, rm_bad=False):
 
     current_language = None
     current_subheader = None
+    parse_info = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: Counter())))
+    #parse_info = defaultdict(lambda: defaultdict(lambda: { 
+        #'conjugations': Counter(),
+        #'translations': Counter(),
+        #'unknown_templates': Counter(),
+        #}))
     translations = defaultdict(lambda: defaultdict(lambda: Counter()))
+    conjugations = defaultdict(lambda: defaultdict(lambda: []))
     synonums = defaultdict(lambda: [])
     otherinfo = defaultdict(lambda: defaultdict(lambda: []))
 
@@ -358,15 +454,26 @@ def process_entry(title, text, rm_bad=False):
             if current_subheader == 'Numeral':
                 current_subheader = 'Number'
 
-        if len(line) >= 2 and line[0:2] == '# ':
+        #if len(line) >= 2 and line[0:2] == '# ':
+        if line.startswith('#'):
             lang_hashash = True
-            defns = extract_definitions(line)
+            parse = parse_line(line[2:])
+            #if parse['unknown_templates']:
+                #for t in parse['unknown_templates']:
+                    #if 'syn' in t:
+                        #print("title, current_language=",title, current_language)
+                        #print("text=",text)
+                        #print("parse['unknown_templates']=",parse['unknown_templates'])
+                        #raise ValueError
+            translations = parse['translations']
             if rm_bad:
-                defns = rm_bad_definitions(defns)
-            if defns:
-                lang_hasword = True
-                page_hasword = True
-                translations[current_language][current_subheader].update(defns)
+                translations = rm_bad_definitions(translations)
+            for k,v in parse.items():
+                if k != 'text':
+                    if k != 'unknown_templates':
+                        lang_hasword = True
+                        page_hasword = True
+                    parse_info[current_language][current_subheader][k].update(v)
 
         matches = re.findall(r'\{\{[^\{\}]*\}\}', line)
         if matches:
@@ -377,7 +484,7 @@ def process_entry(title, text, rm_bad=False):
     else:
         good_pages.append(title)
 
-    return [title, translations, otherinfo]
+    return [title, parse_info, otherinfo]
     #return [title, translations, otherinfo]
     #print(json.dumps(translations))
     #print(json.dumps(otherinfo, indent=4))
@@ -390,18 +497,29 @@ good_langwords = []
 
 def write_output(dumpfile, outdir, rm_bad=True):
     for i, (title,text) in enumerate(iterate(dumpfile)):
-        _, translations, other = process_entry(title, text, rm_bad=rm_bad)
-        for lang in translations.keys():
-            for pos in translations[lang].keys():
+        _, parseinfo, other = process_entry(title, text, rm_bad=rm_bad)
+        for lang in parseinfo.keys():
+            for pos in parseinfo[lang].keys():
                 if pos and lang:
-                    try:
-                        dirpath = os.path.join(outdir, lang)
-                        os.makedirs(dirpath, exist_ok=True)
-                        path = os.path.join(dirpath, 'translation.'+pos)
-                        with open(path, 'at', encoding='utf-8') as fout:
-                            fout.write(title + ':' + ','.join(translations[lang][pos].keys()) + '\n')
-                    except FileNotFoundError as e:
-                        logging.error(f'{e}')
+                    for parsekey,parseval in parseinfo[lang][pos].items():
+                        if parseval:
+                            try:
+                                dirpath = os.path.join(outdir, lang)
+                                os.makedirs(dirpath, exist_ok=True)
+                                path = os.path.join(dirpath, parsekey+'.'+pos)
+                                with open(path, 'at', encoding='utf-8') as fout:
+                                    fout.write(title + ':' + ','.join(parseval.keys()) + '\n')
+                            except FileNotFoundError as e:
+                                logging.error(f'{e}')
+                    #if parseinfo[lang][pos]['conjugations']:
+                        #try:
+                            #dirpath = os.path.join(outdir, lang)
+                            #os.makedirs(dirpath, exist_ok=True)
+                            #path = os.path.join(dirpath, 'conjugation.'+pos)
+                            #with open(path, 'at', encoding='utf-8') as fout:
+                                #fout.write(title + ':' + ','.join(parseinfo[lang][pos]['conjugations'].keys()) + '\n')
+                        #except FileNotFoundError as e:
+                            #logging.error(f'{e}')
         if i%1000 == 0:
             logging.info(f'i={i}, title={title}')
 
@@ -410,11 +528,15 @@ def write_output(dumpfile, outdir, rm_bad=True):
 
     print('Found Templates:')
     for k,v in list(sorted(template_names.items(), reverse=True, key=lambda x: x[1]))[:20]:
-        print(f'{k:30} - {v:8}')
+        print(f'  {k:30} - {v:8}')
 
-    print('Found Glosses:')
-    for k,v in list(sorted(found_glosses.items(), reverse=True, key=lambda x: x[1]))[:20]:
-        print(f'{k:30} - {v:8}')
+    print('Unkown Templates:')
+    for k,v in list(sorted(unknown_template_names.items(), reverse=True, key=lambda x: x[1]))[:20]:
+        print(f'  {k:30} - {v:8}')
+
+    #print('Found Glosses:')
+    #for k,v in list(sorted(found_glosses.items(), reverse=True, key=lambda x: x[1]))[:20]:
+        #print(f'{k:30} - {v:8}')
 
     #print()
     #print("bad_pages=",bad_pages)
@@ -426,6 +548,7 @@ def write_output(dumpfile, outdir, rm_bad=True):
     print("len(bad_langwords)=",len(bad_langwords))
     print("len(good_pages)=",len(good_pages))
     print("len(good_langwords)=",len(good_langwords))
+    print("len(found_glosses)=",len(found_glosses))
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
