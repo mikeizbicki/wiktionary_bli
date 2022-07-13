@@ -16,16 +16,18 @@ valid_pos = {
 
 if __name__ == '__main__':
     import os
-    output = 'output.en'
+    output = 'tmp'
     stats = {}
     for lang in os.listdir(output):
         lang_path = os.path.join(output, lang)
         stats[lang] = {}
-        for pos in os.listdir(lang_path):
-            pos_path = os.path.join(lang_path, pos)
-            if pos in valid_pos:
-                with open(pos_path) as fin:
-                    stats[lang][pos] = len(fin.readlines())
+        for filename in os.listdir(lang_path):
+            if filename.startswith('translation.'):
+                pos = filename[12:]
+                path = os.path.join(lang_path, filename)
+                if pos in valid_pos:
+                    with open(path) as fin:
+                        stats[lang][pos] = len(fin.readlines())
 
     totals = [ (lang, sum(stats[lang].values())) for lang in stats.keys() ]
     totals.sort(key=lambda x: x[1], reverse=True)
