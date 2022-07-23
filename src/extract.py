@@ -9,6 +9,10 @@ import logging
 from collections import defaultdict, Counter
 from wiki_dump_reader import Cleaner, iterate
 
+import sys
+sys.path.append('src')
+from utils import escape
+
 
 def extract_header(line):
     '''
@@ -175,10 +179,6 @@ def parse_line(text, check_hash=True):
     import mwparserfromhell
     wikicode = mwparserfromhell.parse(text)
     ret = defaultdict(lambda: [])
-    #ret = {}
-    #ret['unknown_templates'] = []
-    #ret['conjugations'] = []
-    #ret['synonyms'] = []
     
     def recurse(v):
         if v:
@@ -221,6 +221,52 @@ def parse_line(text, check_hash=True):
                 recurse(node.get('gloss', node.get('t', None)))
             elif nodename in ['zh-classifier', 'th-l', 'zh-original', 'zh-abbrev']:
                 recurse(node.get('gloss', node.get(2, node.get('t', None))))
+
+            # just ignore these templates
+            elif '-usex' in nodename or nodename in [ 
+                # definition needed
+                'rfdef',
+                'rfclarify',
+                'rfex',
+
+                # used on individual letters
+                'Latn-def', 'Latn-def-lite', 'Latn-def',
+
+                # add non-definitional extra information
+                'gl', 'gloss', 'gloss-lite',
+                'lb', 'lbl', 'label', 'tlb', 'term-label',
+                'ng', 'n-g', 'ngd', 'n-g-lite', 'non-gloss definition',
+                'q', 'qf', 'qual', 'qualifier', 'q-lite', 'qualifier-lite', 'i',
+                'c', 'C', 'topics', 'top',
+                'given name', 'surname',
+                'defdate',
+                '+obj',
+                'cln',
+                'only used in', 'used in phrasal verbs',
+                'term-label',
+                'ja-def', 'ja-x', 'ko-x',
+                'mul-kangxi radical-def',
+                'zh-mw', 'zh-div',
+                'short for',
+
+                # possibly these could be added?
+                'bond credit rating',
+                'taxon',
+
+                # a type of anchor tag
+                'anchor', 'senseid', 'rfd-sense', 'rfv-sense', 'sense', 'sense-lite',
+
+                # typography
+                ',', 'ISBN', '...', 'nbsp', 'mono', 'monospace',
+
+                # quotes
+                'ux', 'uxi', 'zh-x', 'ja-usex', 'ko-usex', 'suffixusex', 'usex', 'th-x', 'th-usex', 'hi-x',
+                'quote', 'quote-book', 'quote-journal', 'Q', 'quote-text', 'quote-web', 'quote-newsgroup',
+
+                # ?
+                'coi', '†', 'zh-obsolete',
+                ] or 'quote' in nodename or 'RQ:' in nodename :
+                pass
 
             # specialized templates
             elif nodename in ['ISO 639', 'ISO 3166']:
@@ -275,52 +321,6 @@ def parse_line(text, check_hash=True):
             # templates that we might need to expand later
             elif '-conj' in nodename:
                 ret['conjexp'].append(str(node))
-
-            # just ignore these templates
-            elif nodename in [ 
-                # definition needed
-                'rfdef',
-                'rfclarify',
-                'rfex',
-
-                # used on individual letters
-                'Latn-def', 'Latn-def-lite', 'Latn-def',
-
-                # add non-definitional extra information
-                'gl', 'gloss', 'gloss-lite',
-                'lb', 'lbl', 'label', 'tlb', 'term-label',
-                'ng', 'n-g', 'ngd', 'n-g-lite', 'non-gloss definition',
-                'q', 'qf', 'qual', 'qualifier', 'q-lite', 'qualifier-lite', 'i',
-                'c', 'C', 'topics', 'top',
-                'given name', 'surname',
-                'defdate',
-                '+obj',
-                'cln',
-                'only used in', 'used in phrasal verbs',
-                'term-label',
-                'ja-def', 'ja-x', 'ko-x',
-                'mul-kangxi radical-def',
-                'zh-mw', 'zh-div',
-                'short for',
-
-                # possibly these could be added?
-                'bond credit rating',
-                'taxon',
-
-                # a type of anchor tag
-                'anchor', 'senseid', 'rfd-sense', 'rfv-sense', 'sense', 'sense-lite',
-
-                # typography
-                ',', 'ISBN', '...', 'nbsp', 'mono', 'monospace',
-
-                # quotes
-                'ux', 'uxi', 'zh-x', 'ja-usex', 'suffixusex', 'usex', 'th-x', 'th-usex', 'hi-x',
-                'quote', 'quote-book', 'quote-journal', 'Q', 'quote-text', 'quote-web', 'quote-newsgroup',
-
-                # ?
-                'coi', '†', 'zh-obsolete',
-                ] or 'quote' in nodename or 'RQ:' in nodename :
-                pass
 
             # reverse translations
             elif nodename in ['t', 't+', 'tt', 'tt+', 't-check', 't-simple']:
@@ -497,7 +497,7 @@ def find_entry(word, dump='data/enwiktionary-20220701-pages-articles-multistream
             return text
 
 
-def process_entry(title, text, rm_bad=False):
+def process_entry(title, text, allow_spaces=True):
     r'''
 
     FIXME:
@@ -520,7 +520,7 @@ def process_entry(title, text, rm_bad=False):
 
     '''
 
-    if ' ' in title and rm_bad:
+    if ' ' in title and not allow_spaces:
         return title, {}
     title = title.strip()
     lines = group_squiggles(text).split('\n')
@@ -591,27 +591,27 @@ unknown_template_names = Counter()
 found_glosses = Counter()
 
 
-def extract_intermediate(dumpfile, *, intermediate_dir='intermediate', rm_bad=True, max_iterations:int=None):
+def extract_intermediate(dumpfile, *, intermediate_dir='intermediate', allow_spaces=True, max_iterations:int=None):
     '''
     Extract a wiktionary dump file into a machine-readable intermediate form.
     
     :dumpfile: path to the wiktionary dump file
-    :outdir: location to store the parsed results
+    :intermediate_dir: location to store the parsed results
     :max_iterations: stop processing after this many entries; this is useful for debugging since it greatly lowers the runtime
     '''
     for i, (title,text) in enumerate(iterate(dumpfile)):
-        _, parseinfo = process_entry(title, text, rm_bad=rm_bad)
+        _, parseinfo = process_entry(title, text, allow_spaces=allow_spaces)
         for lang in parseinfo.keys():
             for pos in parseinfo[lang].keys():
                 if pos and lang:
                     for parsekey,parseval in parseinfo[lang][pos].items():
                         if parseval:
                             try:
-                                dirpath = os.path.join(outdir, lang)
+                                dirpath = os.path.join(intermediate_dir, lang)
                                 os.makedirs(dirpath, exist_ok=True)
                                 path = os.path.join(dirpath, parsekey+'.'+pos)
                                 with open(path, 'at', encoding='utf-8') as fout:
-                                    fout.write(title + ':' + ','.join(parseval.keys()) + '\n')
+                                    fout.write(escape(title) + ':' + ','.join(parseval.keys()) + '\n')
                             except FileNotFoundError as e:
                                 logging.error(f'{e}')
         if i%1000 == 0:
