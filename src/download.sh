@@ -1,5 +1,6 @@
 #!/bin/sh
 
+mkdir -p data
 cd data
 
 # for updated links, see https://en.wiktionary.org/wiki/Help:FAQ#Downloading_Wiktionary

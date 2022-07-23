@@ -4,6 +4,7 @@ import os
 import sys
 import glob
 import math
+import json
 
 import logging
 logging.basicConfig(
@@ -218,10 +219,10 @@ def load_rank_from_vec(path, maxn=None): #200000):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input')
-    parser.add_argument('--output')
+    parser.add_argument('--input', required=True)
+    parser.add_argument('--output',required=True)
     parser.add_argument('--langiso', nargs='+', default=None)
-    parser.add_argument('--seed')
+    parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--max_defns', type=int, default=3)
     parser.add_argument('--clobber', action='store_true')
     parser.add_argument('--print_langisos', action='store_true')
@@ -229,6 +230,8 @@ if __name__ == '__main__':
     parser.add_argument('--parid', type=int, default=0)
     parser.add_argument('--nounfactor', type=int, default=10000)
     parser.add_argument('--rank_side', default='tgt', choices=['tgt', 'src', 'srctgt'])
+    parser.add_argument('--rm_src_spaces', default=True)
+    parser.add_argument('--rm_tgt_spaces', default=True)
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -260,14 +263,6 @@ if __name__ == '__main__':
         lang = langs[langiso]
         logging.debug(f'{langiso}:{lang}')
 
-        # if files already exist, then skip
-        # FIXME: broken?
-        if False:
-            existingfiles = glob.glob(f'{outdirname}/{langiso}-*')
-            if len(list(existingfiles)) > 0:
-                logging.debug(f'skipping language')
-                continue
-
         # loading the ranks is slow;
         # only do it if needed
         if 'src' in args.rank_side:
@@ -279,15 +274,14 @@ if __name__ == '__main__':
             unranked = 20000000
             src_rank = 1
             tgt_rank = 1
+            line_parsed = json.loads(line)
             if 'src' in args.rank_side:
-                word = line.split(':')[0]
+                word, = line_parsed['srcs']
                 src_rank += src_ranks.get(word, unranked)
             if 'tgt' in args.rank_side:
-                words = line.split(':')[1].split(',')[:args.max_defns]
+                words = line_parsed['tgts']
                 ranks = [ tgt_ranks.get(word, unranked) for word in words ]
                 tgt_rank += sum(ranks) / (len(ranks) + 1e-6)
-            #print(line.strip(), words, "src_rank, tgt_rank=",src_rank, tgt_rank)
-            #return math.sqrt(src_rank*src_rank + tgt_rank*tgt_rank)
             return max([src_rank, tgt_rank])
 
         # load the words
@@ -329,19 +323,21 @@ if __name__ == '__main__':
                 with open(path, 'w') as fout:
                     deduplines = set()
                     for line in lines:
-                        try:
-                            src, tgts = line.split(':')
-                        except ValueError:
-                            continue
+                        line_parsed = json.loads(line)
+                        src, = line_parsed['srcs']
+                        tgts = line_parsed['tgts']
                         src = src.strip().lower()
-                        dedupline = src + ':' + tgts
+                        dedupline = src + ':' + str(tgts)
                         if dedupline in deduplines:
                             continue
+                        if ' ' in src and args.rm_src_spaces:
+                            continue
+                        if args.rm_tgt_spaces:
+                            tgts = [tgt for tgt in tgts if ' ' not in tgt]
                         deduplines.add(dedupline)
-                        defns = tgts.split(',')
                         if args.max_defns:
-                            defns = defns[:args.max_defns]
-                        for i,tgt in enumerate(defns):
+                            tgts = tgts[:args.max_defns]
+                        for i,tgt in enumerate(tgts):
                             tgt = tgt.strip().lower()
                             fout.write(f'{src}\t{tgt}\n')
             write_lines(os.path.join(outdirname, f'{langiso}-en.train.{pos}'), train[pos])
@@ -360,8 +356,6 @@ if __name__ == '__main__':
             all_test.extend(test[pos])
             all_testsmall.extend(testsmall[pos])
             all.extend(train[pos]+test[pos])
-        #def get_rank(line):
-            #return ranks.get(line.split(':')[0], 99999999999999999999)
         all_train.sort(key=get_rank)
         all_trainsmall.sort(key=get_rank)
         all_test.sort(key=get_rank)

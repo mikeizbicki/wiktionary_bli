@@ -35,7 +35,6 @@ def extract_header(line):
             break
         if level > len(line)-level:
             return (len(line)/2, '')
-            #raise ValueError('No text in the header')
     return (level, line[level:len(line)-level])
 
 
@@ -173,6 +172,8 @@ def parse_line(text, check_hash=True):
     ''
     >>> parse_line("#*:: [...]; and ''Los cuentos de Borges'' [The stories of the Borges] (premiered on TVE2 in 1993), a co-production of TVE with the BBC, the '''producer''' Iberoamericana Films and the French Cinétévé, [...]")['text']
     ''
+    >>> parse_line("# {{place|pt|<<ancient>> [[Greek]] <<city>> in modern <<p:Suf/İzmir>>, <<c/Turkey>>|t1=Ephesus}}")['text']
+    Ephesus
 
     """
 
@@ -205,10 +206,11 @@ def parse_line(text, check_hash=True):
 
         # {{templates}} require complex processing for each different template
         elif type(node) is mwparserfromhell.nodes.template.Template:
-            nodename = str(node.name).strip()
+            nodename = str(node.name).strip().lower()
             template_names[nodename] += 1
             if nodename in ['place']:
-                recurse(node.get('gloss', node.get('t', node.get(2, None))))
+                # FIXME: this is really complicated to parse
+                recurse(node.get('gloss', node.get('t1', node.get('t2', node.get('t', node.get(2, None))))))
             elif nodename in ['place']:
                 recurse(node.get('gloss', node.get('t', node.get(2, None))))
             elif nodename in ['initialism of']:
@@ -222,20 +224,26 @@ def parse_line(text, check_hash=True):
             elif nodename in ['zh-classifier', 'th-l', 'zh-original', 'zh-abbrev']:
                 recurse(node.get('gloss', node.get(2, node.get('t', None))))
 
+            # capture non-gloss definitions ('non-gloss', 'non-gloss definition', non gloss', etc.)
+            elif 'non' in nodename and 'gloss' in nodename:
+                recurse(node.get(1, None))
+
             # just ignore these templates
-            elif '-usex' in nodename or nodename in [ 
+            elif nodename.endswith('usex') or nodename in [ 
                 # definition needed
                 'rfdef',
                 'rfclarify',
                 'rfex',
+                'attention',
 
                 # used on individual letters
                 'Latn-def', 'Latn-def-lite', 'Latn-def',
+                'latn-def', 'latn-def-lite', 'latn-def',
 
                 # add non-definitional extra information
                 'gl', 'gloss', 'gloss-lite',
                 'lb', 'lbl', 'label', 'tlb', 'term-label',
-                'ng', 'n-g', 'ngd', 'n-g-lite', 'non-gloss definition',
+                'ng', 'n-g', 'ngd', 'n-g-lite',
                 'q', 'qf', 'qual', 'qualifier', 'q-lite', 'qualifier-lite', 'i',
                 'c', 'C', 'topics', 'top',
                 'given name', 'surname',
@@ -257,7 +265,7 @@ def parse_line(text, check_hash=True):
                 'anchor', 'senseid', 'rfd-sense', 'rfv-sense', 'sense', 'sense-lite',
 
                 # typography
-                ',', 'ISBN', '...', 'nbsp', 'mono', 'monospace',
+                ',', 'isbn', '...', 'nbsp', 'mono', 'monospace',
 
                 # quotes
                 'ux', 'uxi', 'zh-x', 'ja-usex', 'ko-usex', 'suffixusex', 'usex', 'th-x', 'th-usex', 'hi-x',
@@ -265,11 +273,11 @@ def parse_line(text, check_hash=True):
 
                 # ?
                 'coi', '†', 'zh-obsolete',
-                ] or 'quote' in nodename or 'RQ:' in nodename :
+                ] or 'quote' in nodename or 'rq:' in nodename :
                 pass
 
             # specialized templates
-            elif nodename in ['ISO 639', 'ISO 3166']:
+            elif nodename in ['iso 639', 'iso 3166']:
                 recurse(node.get(3, None))
             elif nodename in ['vern']:
                 recurse(node.get(1, None))
@@ -308,10 +316,18 @@ def parse_line(text, check_hash=True):
                     recurse(gloss)
                 else:
                     ret['conjugations'].append(str(node))
-            elif (len(nodename)>5 and nodename[2] == '-') or nodename.endswith(' of') or nodename.endswith('-of') or nodename.endswith('-alt') or '-form-' in nodename or nodename in [
-                    'alternative spelling of', 'alt sp',
+            elif ((len(nodename)>5 and nodename[2] == '-') or 
+                  nodename.endswith(' of') or
+                  nodename.endswith('-of') or
+                  nodename.endswith('-alt') or
+                  nodename.endswith(' sp') or
+                  nodename.startswith('alt') or
+                  '-form-' in nodename or
+                  nodename in [
+                    'clipping',
+                    'missp',
                     'fr-post-1990',
-                    ]:
+                    ]):
                 gloss = node.get('t', node.get('gloss', None))
                 if gloss:
                     recurse(gloss)
@@ -327,7 +343,7 @@ def parse_line(text, check_hash=True):
                 ret['reverse_translations'].append(str(node))
 
             # synonyms; see https://en.wiktionary.org/wiki/Category:Semantic_relation_templates
-            elif nodename in ['syn', 'synonyms', 'cot', 'coordinate terms', 'ant', 'antonyms', 'holonyms', 'hypernyms', 'hypo', 'hyponyms', 'holonyms', 'holo', 'hyper', 'impf', 'imperfectives', 'meronyms', 'inline alt forms', 'perfectives', 'pf', 'troponyms']:
+            elif nodename in ['syn', 'synonyms', 'cot', 'coordinate terms', 'ant', 'antonym', 'antonyms', 'holonyms', 'hypernyms', 'hypo', 'hyponyms', 'holonyms', 'holo', 'hyper', 'impf', 'imperfectives', 'meronyms', 'inline alt forms', 'perfectives', 'pf', 'troponyms']:
                 for i in range(2,100):
                     v = node.get(i, None)
                     if v:
@@ -446,6 +462,15 @@ def extract_definitions(text):
 
     >>> extract_definitions('now...now, whether...or...')
     ['now...now', 'whether...or...']
+
+
+    FIXME: Tough examples that are currently broken:
+    1. A dancer in the ''Baile de los Tejorones'', a traditional dance of [[Oaxaca]], who humorously imitates a Conquistador
+    1. very close, or fantastic, sister
+    1. The political beliefs, reign, or support for, Carlos Juárez
+    1. relating to, or supporting, Luis Felipe Domínguez Suárez
+    1. A soldier of, or supporter of, Luis Felipe Domínguez Suárez
+
     '''
     text = rm_parens(text)
 
@@ -515,7 +540,7 @@ def process_entry(title, text, allow_spaces=True):
     > __test_process_entry('pies')
     '{"Cornish": {"Noun": {"magpies": 1}}, "Dutch": {"Noun": {"pee": 1, "piss": 1}}, "Kashubian": {"Noun": {"dog": 1}}, "Polish": {"Noun": {"dog": 1, "male dog": 1, "male fox or badger": 1, "cop": 1, "policeman": 1}}}'
 
-    >>> __test_process_entry('may')
+    > __test_process_entry('may')
     '{"Translingual": {"Symbol": {"Malay": 1}}, "English": {"Verb": {"strong": 1, "have power": 1, "able": 1, "can": 1, "able to go": 1, "have permission": 1, "allowed": 1, "gather may": 1, "or flowers in general": 1, "celebrate May Day": 1}, "Noun": {"hawthorn bush or its blossoms": 1, "maiden": 1}}, "Azerbaijani": {"Noun": {"May": 1}}, "Bikol Central": {"Verb": {"there is": 1, "there\'s": 1, "have": 1}}, "Crimean Tatar": {"Noun": {"butter": 1, "oil": 1}}, "Kalasha": {"Determiner": {"my": 1}, "Pronoun": {"me": 1}}, "Mapudungun": {"Adverb": {"yes": 1}}, "Northern Kurdish": {"Noun": {"intervention": 1}}, "Pacoh": {"Pronoun": {"you": 1}}, "Quechua": {"Adverb": {"where": 1, "like": 1, "how": 1, "very": 1}, "Pronoun": {"which": 1}, "Verb": {"fear": 1}}, "Tagalog": {"Particle": {"have": 1}}, "Tatar": {"Noun": {"May": 1}}, "Uzbek": {"Noun": {"May": 1}}, "Vietnamese": {"Verb": {"sew": 1}, "Adjective": {"lucky": 1}}, "Walloon": {"Noun": {"May": 1}}}'
 
     '''
@@ -566,10 +591,10 @@ def process_entry(title, text, allow_spaces=True):
                         parse_info[current_language][current_subheader][k].update(v)
                     else:
                         for translation in parse['translations']:
-                            if ' ' in translation:
-                                parse_info[current_language][current_subheader]['translations_long'][translation] += 1
-                            else:
-                                parse_info[current_language][current_subheader]['translations'][translation] += 1
+                            #if ' ' in translation:
+                                #parse_info[current_language][current_subheader]['translations_long'][translation] += 1
+                            #else:
+                            parse_info[current_language][current_subheader]['translations'][translation] += 1
 
     if not page_hasword and page_hashash:
         bad_pages.append(title)
@@ -611,7 +636,8 @@ def extract_intermediate(dumpfile, *, intermediate_dir='intermediate', allow_spa
                                 os.makedirs(dirpath, exist_ok=True)
                                 path = os.path.join(dirpath, parsekey+'.'+pos)
                                 with open(path, 'at', encoding='utf-8') as fout:
-                                    fout.write(escape(title) + ':' + ','.join(parseval.keys()) + '\n')
+                                    json_dump = json.dumps({'srcs': [title], 'tgts': list(parseval.keys())}, ensure_ascii = False)
+                                    fout.write(json_dump + '\n')
                             except FileNotFoundError as e:
                                 logging.error(f'{e}')
         if i%1000 == 0:

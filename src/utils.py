@@ -1,6 +1,25 @@
 
 
-def escape(s, badchars=':\\', escape='\\'):
+def pair_to_line(srcs, tgts):
+    r'''
+    >>> pair_to_line(['feliz', 'felices'], ['happy', 'this, is, a test'])
+    'feliz,felices:happy,this\\, is\\, a test'
+    '''
+    return ','.join([escape(src) for src in srcs]) + ':' + ','.join([escape(tgt) for tgt in tgts])
+
+
+def line_to_pair(line):
+    r'''
+    >>> line_to_pair('feliz,felices:happy,this\\, is\\, a test')
+    [['feliz', 'felices'], ['happy', 'this, is, a test']]
+    '''
+    src_line, tgt_line = split_unescape(line, ':')
+    srcs = split_unescape(src_line, ',')
+    tgts = split_unescape(tgt_line, ',')
+    return [srcs, tgts]
+
+
+def escape(s, badchars=':,\\', escape='\\'):
     r'''
     >>> escape('test')
     'test'
