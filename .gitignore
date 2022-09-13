@@ -1,6 +1,13 @@
 *.swo
 *.swp
 
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+
+
 __pycache__
 data
 venv
