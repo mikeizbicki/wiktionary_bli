@@ -1,0 +1,192 @@
+\documentclass{beamer}
+\usetheme{Boadilla}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage[round]{natbib}
+%\usepackage[inline]{enumitem}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{mwe}
+
+\usepackage[thaicjk,english]{babel}
+\addto\extrasthaicjk{\fontencoding{C90}\selectfont}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing}
+\usetikzlibrary{positioning}
+\usepackage{pgffor}
+\definecolor{lightred}{rgb}{1,0.5,0.5}
+\definecolor{verylightred}{rgb}{1,0.8,0.8}
+\definecolor{lightgreen}{rgb}{0.8,1.5,0.8}
+\definecolor{darkgreen}{rgb}{0,0.5,0.0}
+\definecolor{darkred}{rgb}{0.5,0,0.0}
+
+\usepackage{array}
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+
+\usepackage{color}
+\usepackage{colortbl}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+\definecolor{gray}{rgb}{0.7,0.7,0.7}
+
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks   = true, %Colours links instead of ugly boxes
+  urlcolor     = black, %Colour for external hyperlinks
+  linkcolor    = blue, %Colour of internal links
+  citecolor    = blue  %Colour of citations
+}
+
+\newcommand{\spacer}[1]{
+    \begin{frame}
+    \begin{center}
+    \Huge\em{#1}
+    \end{center}
+    \end{frame}
+}
+
+\newcommand{\ignore}[1]{}
+\newcommand{\ancestor}{\texttt{path}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\R}{\mathbb R}
+\DeclareMathOperator{\vcdim}{VCdim}
+\DeclareMathOperator{\ddim}{c_{\text{dd}}}
+\DeclareMathOperator{\E}{\mathbb E}
+\DeclareMathOperator{\nnz}{nnz}
+\DeclareMathOperator{\determinant}{det}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\softmax}{softmax}
+
+%\newcommand{\I}{\mathbf I}
+\newcommand{\Q}{\mathbf Q}
+\newcommand{\p}{\mathbf P}
+\newcommand{\pb}{\bar {\p}}
+\newcommand{\pbb}{\bar {\pb}}
+\newcommand{\pr}{\bm \pi}
+\newcommand{\epsapp}{\epsilon_{\text{app}}}
+\newcommand{\epsest}{\epsilon_{\text{est}}}
+
+\newcommand{\parent}[1]{\texttt{parent}({#1})}
+
+\renewcommand{\star}[1]{{#1}^{*}}
+\newcommand{\bad}[1]{{#1}^{\textit{bad}}}
+\newcommand{\trans}[1]{{#1}^{T}}
+\newcommand{\loss}{\ell}
+\newcommand{\aaa}{\mathbf a}
+\newcommand{\vv}{\mathbf v}
+\newcommand{\uu}{\mathbf u}
+\newcommand{\w}{\mathbf w}
+\newcommand{\x}{\mathbf x}
+\newcommand{\y}{\mathbf y}
+\newcommand{\lone}[1]{{\lVert {#1} \rVert}_1}
+\newcommand{\ltwo}[1]{{\lVert {#1} \rVert}_2}
+\newcommand{\lp}[1]{{\lVert {#1} \rVert}_p}
+\newcommand{\linf}[1]{{\lVert {#1} \rVert}_\infty}
+\newcommand{\lF}[1]{{\lVert {#1} \rVert}_F}
+
+\newcommand{\dist}[2]{d_{{#1},{#2}}}
+\newcommand{\level}[1]{\texttt{level}({#1})}
+\newcommand{\depth}[1]{\texttt{depth}({#1})}
+
+\newcommand{\h}{\mathcal H}
+\newcommand{\D}{\mathcal D}
+\DeclareMathOperator*{\erm}{ERM}
+
+\definecolor{lightyellow}{RGB}{255,255,200}
+\newcommand{\hl}[1]{\colorbox{lightyellow}{#1}}
+
+\newcommand{\cexp}{c_\textnormal{exp}}
+\newcommand{\cdoub}{c_\textnormal{doub}}
+\newcommand{\cdoubstar}{c_{\textnormal{doub}^*}}
+\newcommand{\chole}{c_\textnormal{hole}}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\author {Mike Izbicki}
+\institute{Claremont McKenna}
+\title[Better Multiclass Classification]{}
+\date{2 Feb 2022}
+
+\begin{document}
+
+\beamertemplatenavigationsymbolsempty
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Problem: Existing BLI datasets are machine generated}
+    \begin{itemize}
+        %\item Existing datasets all generated from machine translation systems
+
+            %\vspace{0.1in}
+        \item Using machine translation as ``ground truth'' for another machine translation
+            \begin{itemize}
+                \item not always bad, but never ideal
+            \end{itemize}
+
+        \item This results in weird artifacts:
+
+            %\ignore{
+            \vspace{0.1in}
+            {
+                \small
+    \begin{tabular}{p{2in}p{2in}}
+        \toprule
+         %\addlinespace[-\aboverulesep]
+         %\cmidrule[\heavyrulewidth]{1-2}
+         %\addlinespace[-\aboverulesep]
+         %\cmidrule[\heavyrulewidth]{4-5}
+        Thai ``Word'' & English ``Translation''                        \\%&& Vietnamese & English \\        
+         %\cmidrule[\heavyrulewidth]{1-2}
+         %\cmidrule[\heavyrulewidth]{4-5}
+        \midrule                                          
+        \foreignlanguage{thaicjk}{แคลอรี่}     &  calories  \\
+        \foreignlanguage{thaicjk}{โคมลอย}    &  lanterns  \\
+        annie                                &  annie     \\
+        %univ                                 &  univ      \\
+        bdfutbol                             &  bdfutbol  \\
+        %efm                                  &  efm       \\
+        %\foreignlanguage{thaicjk}{พล็อต}      &  plot      \\
+        getparent                            &  getparent \\
+        roca                                 &  roca      \\
+        %\foreignlanguage{thaicjk}{เป๊ะ}       &  exactly   \\
+        \bottomrule
+         %\cmidrule[\heavyrulewidth]{1-2}
+         %\cmidrule[\heavyrulewidth]{4-5}
+    \end{tabular}
+}
+%}
+
+            \vspace{0.2in}
+        \item
+            Quality varies tremendously between languages
+            
+            (EN-ES pretty good... EN-TH pretty bad... others??? )
+
+            \vspace{0.1in}
+        \item \citet{kementchedjhieva2019lost} suggest that future research 
+            
+            %\begin{quote}
+            \emph{
+                ``avoids drawing conclusions from quantitative results on [the MUSE] BLI dataset.''
+            }
+            %\end{quote}
+    \end{itemize}
+\end{frame}
+
+\end{document}
+
